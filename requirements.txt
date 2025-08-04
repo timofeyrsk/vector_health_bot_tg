@@ -1,0 +1,13 @@
+Flask
+Flask-CORS
+SQLAlchemy
+psycopg2-binary
+python-dotenv
+openai
+requests
+langchain
+langchain-community
+langchain-openai
+python-telegram-bot
+schedule
+
