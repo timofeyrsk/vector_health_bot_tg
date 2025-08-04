@@ -599,13 +599,7 @@ class TelegramService:
             weight = float(text.strip())
             if 30 <= weight <= 300:
                 health_service.update_user_profile(user_id, {'current_weight_kg': weight})
-                self.send_message(chat_id, """Какова ваша основная цель?
-
-1. Сбросить вес - Уменьшить массу тела
-2. Поддерживать вес - Оставаться на текущем весе
-3. Набрать вес - Увеличить массу тела
-
-Пожалуйста, ответьте: Сбросить, Поддерживать или Набрать""")
+                # Don't send goal question here - it will be handled by _handle_onboarding_step
             else:
                 self.send_message(chat_id, "Пожалуйста, введите корректный вес от 30 до 300 кг")
         except ValueError:
