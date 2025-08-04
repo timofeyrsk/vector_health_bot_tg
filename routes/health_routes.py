@@ -6,6 +6,14 @@ from database.connection import get_db
 health_bp = Blueprint('health', __name__)
 logger = logging.getLogger(__name__)
 
+@health_bp.route('/', methods=['GET'])
+def health_check():
+    """
+    Эндпоинт для проверки состояния сервиса.
+    Отвечает статусом 200 OK, если приложение работает.
+    """
+    return jsonify(status="ok"), 200
+
 @health_bp.route('/profile/<int:user_id>', methods=['GET'])
 def get_user_profile(user_id):
     """Get user profile by user ID"""
