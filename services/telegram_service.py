@@ -599,7 +599,23 @@ class TelegramService:
             weight = float(text.strip())
             if 30 <= weight <= 300:
                 health_service.update_user_profile(user_id, {'current_weight_kg': weight})
-                # Don't send goal question here - it will be handled by _handle_onboarding_step
+                
+                # Show goal selection buttons immediately after saving current weight
+                message = """Какова ваша основная цель?
+
+1. Сбросить вес - Уменьшить массу тела
+2. Поддерживать вес - Оставаться на текущем весе  
+3. Набрать вес - Увеличить массу тела
+
+Выберите вашу цель:"""
+                
+                keyboard = [
+                    [{'text': '1️⃣ Сбросить вес', 'callback_data': 'onboarding_goal_lose'}],
+                    [{'text': '2️⃣ Поддерживать вес', 'callback_data': 'onboarding_goal_maintain'}],
+                    [{'text': '3️⃣ Набрать вес', 'callback_data': 'onboarding_goal_gain'}]
+                ]
+                
+                self.send_message_with_keyboard(chat_id, message, keyboard)
             else:
                 self.send_message(chat_id, "Пожалуйста, введите корректный вес от 30 до 300 кг")
         except ValueError:
