@@ -201,7 +201,7 @@ class TelegramService:
                 if not user_profile:
                     health_service.create_user_profile(user_id, chat_id)
                 
-                self.send_message_with_main_menu_button(chat_id, message)
+                self.send_message(chat_id, message)
             
             return {'status': 'success', 'action': 'onboarding_started'}
             
@@ -581,27 +581,22 @@ class TelegramService:
         return {'status': 'success'}
     
     def _handle_goal_input(self, health_service, user_id: int, chat_id: int, text: str) -> Dict:
-        goal_text = text.lower().strip()
-        if goal_text in ['сбросить', 'сбросить вес', 'похудеть', 'lose', 'lose weight', 'weight loss']:
-            health_service.update_user_profile(user_id, {'goal': 'lose_weight'})
-            self.send_message(chat_id, "Какой у вас целевой вес в килограммах? (например, 65)")
-        elif goal_text in ['поддерживать', 'поддерживать вес', 'maintain', 'maintain weight']:
-            health_service.update_user_profile(user_id, {'goal': 'maintain_weight'})
-            # For maintain, target weight = current weight
-            user_profile = health_service.get_user_profile(user_id)
-            health_service.update_user_profile(user_id, {'target_weight_kg': user_profile.current_weight_kg})
-            self.send_message(chat_id, """Какой у вас уровень активности\\?
+        """Handle goal input - now sends buttons instead of asking for text"""
+        message = """Какова ваша основная цель?
 
-1\\. *Малоподвижный* \\- Минимальные физические нагрузки
-2\\. *Умеренный* \\- Легкие упражнения 1\\-3 раза в неделю
-3\\. *Активный* \\- Умеренные упражнения 3\\-5 раз в неделю
+1. Сбросить вес - Уменьшить массу тела
+2. Поддерживать вес - Оставаться на текущем весе  
+3. Набрать вес - Увеличить массу тела
 
-Пожалуйста, ответьте: *Малоподвижный*, *Умеренный* или *Активный*""")
-        elif goal_text in ['набрать', 'набрать вес', 'поправиться', 'gain', 'gain weight', 'weight gain']:
-            health_service.update_user_profile(user_id, {'goal': 'gain_weight'})
-            self.send_message(chat_id, "Какой у вас целевой вес в килограммах? (например, 75)")
-        else:
-            self.send_message(chat_id, "Пожалуйста, ответьте 'Сбросить', 'Поддерживать' или 'Набрать'")
+Выберите вашу цель:"""
+        
+        keyboard = [
+            [{'text': '1️⃣ Сбросить вес', 'callback_data': 'onboarding_goal_lose'}],
+            [{'text': '2️⃣ Поддерживать вес', 'callback_data': 'onboarding_goal_maintain'}],
+            [{'text': '3️⃣ Набрать вес', 'callback_data': 'onboarding_goal_gain'}]
+        ]
+        
+        self.send_message_with_keyboard(chat_id, message, keyboard)
         return {'status': 'success'}
     
     def _handle_target_weight_input(self, health_service, user_id: int, chat_id: int, text: str) -> Dict:
@@ -609,17 +604,26 @@ class TelegramService:
             target_weight = float(text.strip())
             if 30 <= target_weight <= 300:
                 health_service.update_user_profile(user_id, {'target_weight_kg': target_weight})
-                self.send_message(chat_id, """Какой у вас уровень активности?
+                
+                message = """Какой у вас уровень активности?
 
-1. Малоподвижный - Минимальные физические нагрузки
+1. Малоподвижный – Минимальные физические нагрузки
 2. Умеренный - Легкие упражнения 1-3 раза в неделю
 3. Активный - Умеренные упражнения 3-5 раз в неделю
 
-Пожалуйста, ответьте: Малоподвижный, Умеренный или Активный""")
+Выберите ваш уровень активности:"""
+                
+                keyboard = [
+                    [{'text': '1️⃣ Малоподвижный', 'callback_data': 'onboarding_activity_sedentary'}],
+                    [{'text': '2️⃣ Умеренный', 'callback_data': 'onboarding_activity_moderate'}],
+                    [{'text': '3️⃣ Активный', 'callback_data': 'onboarding_activity_active'}]
+                ]
+                
+                self.send_message_with_keyboard(chat_id, message, keyboard)
             else:
                 self.send_message(chat_id, "Пожалуйста, введите корректный целевой вес от 30 до 300 кг")
         except ValueError:
-            self.send_message(chat_id, "Пожалуйста, введите ваш целевой вес числом \\(например, 65\\)")
+            self.send_message(chat_id, "Пожалуйста, введите ваш целевой вес числом (например, 65)")
         return {'status': 'success'}
     
     def _handle_activity_level_input(self, health_service, user_id: int, chat_id: int, text: str) -> Dict:
@@ -805,6 +809,18 @@ class TelegramService:
                     return self._handle_stats_month_callback(user_id, chat_id, message_id)
                 elif callback_data == 'stats_progress':
                     return self._handle_stats_progress_callback(user_id, chat_id, message_id)
+                elif callback_data == 'onboarding_goal_lose':
+                    return self._handle_onboarding_goal_callback(user_id, chat_id, message_id, 'lose_weight')
+                elif callback_data == 'onboarding_goal_maintain':
+                    return self._handle_onboarding_goal_callback(user_id, chat_id, message_id, 'maintain_weight')
+                elif callback_data == 'onboarding_goal_gain':
+                    return self._handle_onboarding_goal_callback(user_id, chat_id, message_id, 'gain_weight')
+                elif callback_data == 'onboarding_activity_sedentary':
+                    return self._handle_onboarding_activity_callback(user_id, chat_id, message_id, 'sedentary')
+                elif callback_data == 'onboarding_activity_moderate':
+                    return self._handle_onboarding_activity_callback(user_id, chat_id, message_id, 'moderate')
+                elif callback_data == 'onboarding_activity_active':
+                    return self._handle_onboarding_activity_callback(user_id, chat_id, message_id, 'active')
                 # ... другие короткие команды ...
                 else:
                     logger.warning(f"Unknown callback data: {callback_data}")
@@ -2390,3 +2406,92 @@ class TelegramService:
             state_manager.clear_state(user_id)
             return {'status': 'error', 'error': str(e)}
 
+    def _handle_onboarding_goal_callback(self, user_id: int, chat_id: int, message_id: int, goal: str) -> Dict:
+        """Handle goal selection during onboarding"""
+        db = None
+        try:
+            db = next(get_db())
+            health_service = HealthService(db)
+            
+            # Update user profile with selected goal
+            health_service.update_user_profile(user_id, {'goal': goal})
+            
+            if goal == 'maintain_weight':
+                # For maintain weight, set target = current weight and go to activity
+                user_profile = health_service.get_user_profile(user_id)
+                health_service.update_user_profile(user_id, {'target_weight_kg': user_profile.current_weight_kg})
+                
+                message = """Какой у вас уровень активности?
+
+1. Малоподвижный – Минимальные физические нагрузки
+2. Умеренный - Легкие упражнения 1-3 раза в неделю
+3. Активный - Умеренные упражнения 3-5 раз в неделю
+
+Выберите ваш уровень активности:"""
+                
+                keyboard = [
+                    [{'text': '1️⃣ Малоподвижный', 'callback_data': 'onboarding_activity_sedentary'}],
+                    [{'text': '2️⃣ Умеренный', 'callback_data': 'onboarding_activity_moderate'}],
+                    [{'text': '3️⃣ Активный', 'callback_data': 'onboarding_activity_active'}]
+                ]
+                
+                self.edit_message_with_keyboard(chat_id, message_id, message, keyboard)
+            else:
+                # Ask for target weight
+                message = "Какой у вас целевой вес в килограммах? (например, 65)"
+                self.edit_message_with_keyboard(chat_id, message_id, message, [])
+            
+            return {'status': 'success', 'goal': goal}
+            
+        except Exception as e:
+            logger.error(f"Error handling onboarding goal callback: {str(e)}")
+            return {'status': 'error', 'error': str(e)}
+        finally:
+            if db:
+                db.close()
+
+    def _handle_onboarding_activity_callback(self, user_id: int, chat_id: int, message_id: int, activity: str) -> Dict:
+        """Handle activity level selection during onboarding"""
+        db = None
+        try:
+            db = next(get_db())
+            health_service = HealthService(db)
+            
+            # Update user profile with selected activity level
+            health_service.update_user_profile(user_id, {'activity_level': activity})
+            
+            # Calculate user targets
+            health_service.calculate_user_targets(user_id)
+            
+            # Get updated profile to show calculated values
+            user_profile = health_service.get_user_profile(user_id)
+            
+            # Send completion message
+            message = f"""🎉 *Настройка профиля завершена!*
+
+Ваш персональный план питания готов! Я рассчитал ваши дневные нормы на основе ваших целей.
+
+📊 *Ваши дневные нормы:*
+• Калории: {user_profile.daily_calorie_target} ккал
+• Белки: {user_profile.daily_protein_target_g}г
+• Жиры: {user_profile.daily_fat_target_g}г
+• Углеводы: {user_profile.daily_carbs_target_g}г
+
+Теперь вы можете:
+📸 Отправлять фотографии приемов пищи для автоматической записи
+📝 Описывать еду текстом
+📊 Получать дневные отчеты с помощью /summary
+🔗 Подключать носимые устройства с помощью /connect_wearable
+
+Давайте начнем ваш путь к здоровью! Отправьте мне фотографию или описание вашего следующего приема пищи."""
+            
+            keyboard = self._get_main_menu_keyboard()
+            self.edit_message_with_keyboard(chat_id, message_id, message, keyboard)
+            return {'status': 'success', 'activity': activity}
+            
+        except Exception as e:
+            logger.error(f"Error handling onboarding activity callback: {str(e)}")
+            return {'status': 'error', 'error': str(e)}
+        finally:
+            if db:
+                db.close()
