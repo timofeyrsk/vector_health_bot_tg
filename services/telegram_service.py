@@ -363,11 +363,43 @@ class TelegramService:
             elif not user_profile.current_weight_kg:
                 return self._handle_current_weight_input(health_service, user_id, chat_id, text)
             elif not user_profile.goal:
-                return self._handle_goal_input(health_service, user_id, chat_id, text)
+                # Show goal selection buttons instead of asking for text input
+                message = """Какова ваша основная цель?
+
+1. Сбросить вес - Уменьшить массу тела
+2. Поддерживать вес - Оставаться на текущем весе  
+3. Набрать вес - Увеличить массу тела
+
+Выберите вашу цель:"""
+                
+                keyboard = [
+                    [{'text': '1️⃣ Сбросить вес', 'callback_data': 'onboarding_goal_lose'}],
+                    [{'text': '2️⃣ Поддерживать вес', 'callback_data': 'onboarding_goal_maintain'}],
+                    [{'text': '3️⃣ Набрать вес', 'callback_data': 'onboarding_goal_gain'}]
+                ]
+                
+                self.send_message_with_keyboard(chat_id, message, keyboard)
+                return {'status': 'success', 'action': 'goal_selection_shown'}
             elif not user_profile.target_weight_kg:
                 return self._handle_target_weight_input(health_service, user_id, chat_id, text)
             elif not user_profile.activity_level:
-                return self._handle_activity_level_input(health_service, user_id, chat_id, text)
+                # Show activity selection buttons instead of asking for text input
+                message = """Какой у вас уровень активности?
+
+1. Малоподвижный – Минимальные физические нагрузки
+2. Умеренный - Легкие упражнения 1-3 раза в неделю
+3. Активный - Умеренные упражнения 3-5 раз в неделю
+
+Выберите ваш уровень активности:"""
+                
+                keyboard = [
+                    [{'text': '1️⃣ Малоподвижный', 'callback_data': 'onboarding_activity_sedentary'}],
+                    [{'text': '2️⃣ Умеренный', 'callback_data': 'onboarding_activity_moderate'}],
+                    [{'text': '3️⃣ Активный', 'callback_data': 'onboarding_activity_active'}]
+                ]
+                
+                self.send_message_with_keyboard(chat_id, message, keyboard)
+                return {'status': 'success', 'action': 'activity_selection_shown'}
             else:
                 # Onboarding complete, calculate targets
                 health_service.calculate_user_targets(user_id)
@@ -605,6 +637,7 @@ class TelegramService:
             if 30 <= target_weight <= 300:
                 health_service.update_user_profile(user_id, {'target_weight_kg': target_weight})
                 
+                # Show activity selection buttons
                 message = """Какой у вас уровень активности?
 
 1. Малоподвижный – Минимальные физические нагрузки
