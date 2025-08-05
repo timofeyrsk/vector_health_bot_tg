@@ -10,4 +10,5 @@ langchain-community
 langchain-openai
 python-telegram-bot
 schedule
+pytz
 

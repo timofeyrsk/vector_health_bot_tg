@@ -429,32 +429,19 @@ class TelegramService:
         db = None
         try:
             # Подготовка контекста пользователя
-            user_context = None
+            full_user_context = None
             if user_profile:
                 db = next(get_db())
                 health_service = HealthService(db)
                 
-                user_context = {
-                    'goal': user_profile.goal,
-                    'age': user_profile.age,
-                    'gender': user_profile.gender,
-                    'daily_calorie_target': user_profile.daily_calorie_target,
-                    'daily_protein_target_g': user_profile.daily_protein_target_g,
-                    'daily_fat_target_g': user_profile.daily_fat_target_g,
-                    'daily_carbs_target_g': user_profile.daily_carbs_target_g
-                }
-                
-                # Если вопрос может касаться личных данных, добавляем недавние логи
-                if any(word in text.lower() for word in ['мой', 'моя', 'мое', 'я', 'сегодня', 'вчера', 'неделя']):
-                    from datetime import date
-                    summary = health_service.get_daily_summary(user_id, date.today())
-                    user_context['recent_data'] = summary
+                # Используем новую функцию для получения полного контекста
+                full_user_context = health_service.get_user_context_for_llm(user_id, text)
             
             # Отправляем сообщение о том, что обрабатываем
             self.send_message(chat_id, "🤔 Анализирую ваше сообщение...")
             
-            # Используем новую универсальную функцию
-            result = self.openai_service.process_user_message(text, user_context)
+            # Используем новую универсальную функцию с полным контекстом
+            result = self.openai_service.process_user_message(text, full_user_context)
             
             # Обрабатываем результат в зависимости от намерения
             if result['intent'] == 'food_log':

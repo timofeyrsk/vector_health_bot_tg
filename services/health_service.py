@@ -481,16 +481,17 @@ class HealthService:
             # Calculate remaining targets for daily reports only
             if period == 'daily':
                 remaining_days = 1
-                remaining_calories = max(0, period_calorie_target - total_calories)
-                remaining_protein = max(0, period_protein_target - total_protein)
-                remaining_fat = max(0, period_fat_target - total_fat)
-                remaining_carbs = max(0, period_carbs_target - total_carbs)
+                # Calculate actual remaining (can be negative for surplus)
+                remaining_calories = period_calorie_target - total_calories
+                remaining_protein = period_protein_target - total_protein
+                remaining_fat = period_fat_target - total_fat
+                remaining_carbs = period_carbs_target - total_carbs
                 
-                # Calculate average daily targets for remaining days
-                avg_daily_calories_remaining = remaining_calories / remaining_days if remaining_days > 0 else 0
-                avg_daily_protein_remaining = remaining_protein / remaining_days if remaining_days > 0 else 0
-                avg_daily_fat_remaining = remaining_fat / remaining_days if remaining_days > 0 else 0
-                avg_daily_carbs_remaining = remaining_carbs / remaining_days if remaining_days > 0 else 0
+                # Calculate average daily targets for remaining days (use max(0, ...) for recommendations)
+                avg_daily_calories_remaining = max(0, remaining_calories) / remaining_days if remaining_days > 0 else 0
+                avg_daily_protein_remaining = max(0, remaining_protein) / remaining_days if remaining_days > 0 else 0
+                avg_daily_fat_remaining = max(0, remaining_fat) / remaining_days if remaining_days > 0 else 0
+                avg_daily_carbs_remaining = max(0, remaining_carbs) / remaining_days if remaining_days > 0 else 0
             else:
                 # For weekly reports, don't calculate remaining days recommendations
                 remaining_days = 0
@@ -502,6 +503,17 @@ class HealthService:
                 avg_daily_protein_remaining = 0
                 avg_daily_fat_remaining = 0
                 avg_daily_carbs_remaining = 0
+            
+            # Prepare list of eaten foods for daily reports
+            eaten_foods = []
+            if period == 'daily':
+                for log in food_logs:
+                    food_info = {
+                        'dish_name': log.dish_name or log.description,
+                        'weight_g': float(log.estimated_weight_g or 0),
+                        'calories': log.calories or 0
+                    }
+                    eaten_foods.append(food_info)
             
             return {
                 'period': period,
@@ -542,10 +554,147 @@ class HealthService:
                 'avg_daily_calories_remaining': avg_daily_calories_remaining,
                 'avg_daily_protein_remaining': avg_daily_protein_remaining,
                 'avg_daily_fat_remaining': avg_daily_fat_remaining,
-                'avg_daily_carbs_remaining': avg_daily_carbs_remaining
+                'avg_daily_carbs_remaining': avg_daily_carbs_remaining,
+                # List of eaten foods for daily reports
+                'eaten_foods': eaten_foods
             }
             
         except Exception as e:
             logger.error(f"Error generating {period} report: {str(e)}")
+            return {}
+    
+    def get_user_context_for_llm(self, user_id: int, question: str) -> Dict:
+        """
+        Get comprehensive user context for LLM analysis based on question content
+        
+        Args:
+            user_id: User ID
+            question: User's question text for context analysis
+            
+        Returns:
+            Dictionary with user profile, history, and today's summary
+        """
+        try:
+            from datetime import date, timedelta
+            import re
+            
+            # Get user profile
+            user_profile = self.get_user_profile(user_id)
+            if not user_profile:
+                return {}
+            
+            # Analyze question for time period keywords
+            question_lower = question.lower()
+            
+            # Define time period patterns
+            time_patterns = {
+                'yesterday': ['вчера', 'вчерашний', 'вчерашняя', 'вчерашнее'],
+                'today': ['сегодня', 'сегодняшний', 'сегодняшняя', 'сегодняшнее'],
+                'week': ['неделя', 'неделю', 'недели', 'за неделю', 'на неделе', 'прошлая неделя'],
+                'month': ['месяц', 'месяца', 'за месяц', 'в этом месяце', 'прошлый месяц'],
+                'recent': ['недавно', 'последние', 'за последние', 'недавний']
+            }
+            
+            # Determine time period from question
+            target_period = 'today'  # default
+            for period, keywords in time_patterns.items():
+                if any(keyword in question_lower for keyword in keywords):
+                    target_period = period
+                    break
+            
+            # Calculate date range based on period
+            today = date.today()
+            
+            if target_period == 'yesterday':
+                start_date = today - timedelta(days=1)
+                end_date = today - timedelta(days=1)
+                period_description = "Вчерашний день"
+            elif target_period == 'today':
+                start_date = today
+                end_date = today
+                period_description = "Сегодняшний день"
+            elif target_period == 'week':
+                start_date = today - timedelta(days=7)
+                end_date = today
+                period_description = "Последние 7 дней"
+            elif target_period == 'month':
+                start_date = today - timedelta(days=30)
+                end_date = today
+                period_description = "Последние 30 дней"
+            elif target_period == 'recent':
+                start_date = today - timedelta(days=3)
+                end_date = today
+                period_description = "Последние 3 дня"
+            else:
+                start_date = today
+                end_date = today
+                period_description = "Сегодняшний день"
+            
+            # Get food logs for the period
+            start_datetime = datetime.combine(start_date, datetime.min.time())
+            end_datetime = datetime.combine(end_date, datetime.max.time())
+            
+            food_logs = (self.db.query(FoodLog)
+                        .filter(FoodLog.user_id == user_id)
+                        .filter(FoodLog.created_at >= start_datetime)
+                        .filter(FoodLog.created_at <= end_datetime)
+                        .order_by(FoodLog.created_at.desc())
+                        .all())
+            
+            # Format food logs for context
+            formatted_food_logs = []
+            for log in food_logs:
+                food_info = {
+                    'dish_name': log.dish_name or log.description,
+                    'calories': log.calories or 0,
+                    'protein_g': float(log.protein_g or 0),
+                    'fat_g': float(log.fat_g or 0),
+                    'carbs_g': float(log.carbs_g or 0),
+                    'weight_g': float(log.estimated_weight_g or 0),
+                    'created_at': log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else None
+                }
+                formatted_food_logs.append(food_info)
+            
+            # Calculate totals for the period
+            total_calories = sum(log.calories or 0 for log in food_logs)
+            total_protein = sum(float(log.protein_g or 0) for log in food_logs)
+            total_fat = sum(float(log.fat_g or 0) for log in food_logs)
+            total_carbs = sum(float(log.carbs_g or 0) for log in food_logs)
+            
+            # Get today's summary for comparison
+            today_summary = self.get_daily_summary(user_id, today)
+            
+            # Build context dictionary
+            context = {
+                "profile": {
+                    "goal": user_profile.goal,
+                    "daily_calorie_target": user_profile.daily_calorie_target,
+                    "daily_protein_target_g": float(user_profile.daily_protein_target_g or 0),
+                    "daily_fat_target_g": float(user_profile.daily_fat_target_g or 0),
+                    "daily_carbs_target_g": float(user_profile.daily_carbs_target_g or 0),
+                    "age": user_profile.age,
+                    "gender": user_profile.gender,
+                    "current_weight_kg": user_profile.current_weight_kg,
+                    "target_weight_kg": user_profile.target_weight_kg,
+                    "activity_level": user_profile.activity_level
+                },
+                "history": {
+                    "period_description": period_description,
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "food_logs": formatted_food_logs,
+                    "total_entries": len(food_logs),
+                    "total_calories": total_calories,
+                    "total_protein": total_protein,
+                    "total_fat": total_fat,
+                    "total_carbs": total_carbs
+                },
+                "today_summary": today_summary
+            }
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Error getting user context for LLM: {str(e)}")
             return {}
 
